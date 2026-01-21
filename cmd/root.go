@@ -7,10 +7,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/omgitsads/gh-pair/internal/git"
+	"github.com/omgitsads/gh-pair/internal/theme"
 	"github.com/omgitsads/gh-pair/internal/tui"
 )
 
 var themeName string
+var themeFlag bool // tracks if --theme was explicitly set
 
 var rootCmd = &cobra.Command{
 	Use:   "gh-pair",
@@ -28,7 +30,7 @@ subcommands for quick operations.`,
 		}
 
 		// Launch the TUI with theme
-		return tui.RunWithTheme(themeName)
+		return tui.RunWithTheme(getThemeName())
 	},
 }
 
@@ -39,7 +41,15 @@ func Execute() error {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "default", "Color theme (default, dracula, nord, solarized-dark, solarized-light, catppuccin)")
+	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "", "Color theme (default, dracula, nord, solarized-dark, solarized-light, catppuccin)")
+}
+
+// getThemeName returns the theme name from flag or config.
+func getThemeName() string {
+	if themeName != "" {
+		return themeName
+	}
+	return theme.GetConfiguredTheme()
 }
 
 // checkGitRepo is a helper that verifies we're in a git repository.

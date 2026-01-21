@@ -15,8 +15,9 @@ var themeCmd = &cobra.Command{
 	Long: `List all available themes (preset and custom) or preview a specific theme.
 
 Examples:
-  gh pair theme           # List all available themes
-  gh pair theme dracula   # Preview the dracula theme`,
+  gh pair theme              # List all available themes
+  gh pair theme dracula      # Preview the dracula theme
+  gh pair theme set dracula  # Set dracula as your default theme`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -27,11 +28,56 @@ Examples:
 	},
 }
 
+var themeSetCmd = &cobra.Command{
+	Use:   "set <theme>",
+	Short: "Set the default theme",
+	Long:  `Set the default theme to use when launching gh-pair.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		
+		// Verify theme exists
+		t := theme.GetTheme(name)
+		if t.Name == "" && name != "default" {
+			// Theme not found, check if it's a valid preset or custom
+			found := false
+			for _, preset := range theme.PresetNames() {
+				if preset == name {
+					found = true
+					break
+				}
+			}
+			for _, custom := range theme.ListCustomThemes() {
+				if custom == name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("theme %q not found", name)
+			}
+		}
+
+		if err := theme.SetConfiguredTheme(name); err != nil {
+			return fmt.Errorf("failed to save theme: %w", err)
+		}
+
+		styles := theme.NewStyles(theme.GetTheme(name))
+		fmt.Printf("%s Theme set to %s\n", 
+			styles.Success.Render("✓"),
+			styles.Title.Render(name))
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(themeCmd)
+	themeCmd.AddCommand(themeSetCmd)
 }
 
 func listThemes() {
+	currentTheme := theme.GetConfiguredTheme()
+	
 	fmt.Println("Available themes:")
 	fmt.Println()
 
@@ -40,7 +86,11 @@ func listThemes() {
 	for _, name := range theme.PresetNames() {
 		t := theme.GetTheme(name)
 		preview := renderColorPreview(t)
-		fmt.Printf("  %-18s %s\n", name, preview)
+		marker := "  "
+		if name == currentTheme {
+			marker = "► "
+		}
+		fmt.Printf("%s%-18s %s\n", marker, name, preview)
 	}
 
 	// Custom themes
@@ -51,12 +101,16 @@ func listThemes() {
 		for _, name := range customThemes {
 			t := theme.GetTheme(name)
 			preview := renderColorPreview(t)
-			fmt.Printf("  %-18s %s\n", name, preview)
+			marker := "  "
+			if name == currentTheme {
+				marker = "► "
+			}
+			fmt.Printf("%s%-18s %s\n", marker, name, preview)
 		}
 	}
 
 	fmt.Println()
-	fmt.Println("Use: gh pair --theme <name>")
+	fmt.Println("Use: gh pair theme set <name>")
 }
 
 func previewTheme(name string) {

@@ -64,12 +64,20 @@ Configuration is stored per-repository in `.git/gh-pair/`:
 
 ## Themes
 
-gh-pair supports multiple color themes. Use `--theme` to switch:
+gh-pair supports multiple color themes. Use `--theme` to override temporarily:
 
 ```bash
 gh pair --theme dracula
 gh pair --theme nord
 ```
+
+### Setting a Default Theme
+
+```bash
+gh pair theme set dracula
+```
+
+This saves your preference to the global config file.
 
 ### Available Themes
 
@@ -87,7 +95,12 @@ Preview a theme: `gh pair theme dracula`
 
 ### Custom Themes
 
-Create custom themes by adding JSON files to `~/.config/gh-pair/themes/`:
+Create custom themes by adding JSON files to your config directory:
+- **macOS**: `~/Library/Application Support/gh-pair/themes/`
+- **Linux**: `~/.config/gh-pair/themes/`
+- **Windows**: `%AppData%\gh-pair\themes\`
+
+Example theme file:
 
 ```json
 {
@@ -106,7 +119,7 @@ Create custom themes by adding JSON files to `~/.config/gh-pair/themes/`:
 }
 ```
 
-Save as `~/.config/gh-pair/themes/my-theme.json`, then use with `gh pair --theme my-theme`.
+Save as `my-theme.json` in the themes directory, then use with `gh pair theme set my-theme`.
 
 ## Requirements
 
