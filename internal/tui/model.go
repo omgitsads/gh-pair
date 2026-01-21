@@ -8,11 +8,11 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/omgitsads/gh-pair/internal/config"
 	"github.com/omgitsads/gh-pair/internal/github"
 	"github.com/omgitsads/gh-pair/internal/hook"
+	"github.com/omgitsads/gh-pair/internal/theme"
 )
 
 const debounceDelay = 300 * time.Millisecond
@@ -51,6 +51,9 @@ type Model struct {
 	teamMembers     []config.Pair
 	filteredTeamMembers []config.Pair
 	searchTab       SearchTab
+
+	// Theme and styles
+	styles        theme.Styles
 
 	pairList      list.Model
 	searchInput   textinput.Model
@@ -122,10 +125,18 @@ type (
 
 // NewModel creates a new TUI model.
 func NewModel() Model {
+	return NewModelWithTheme("default")
+}
+
+// NewModelWithTheme creates a new TUI model with a specific theme.
+func NewModelWithTheme(themeName string) Model {
+	t := theme.GetTheme(themeName)
+	styles := theme.NewStyles(t)
+
 	// Set up spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = styles.Spinner
 
 	// Set up search input
 	ti := textinput.New()
@@ -139,10 +150,7 @@ func NewModel() Model {
 	pairList.Title = "Current Pairs"
 	pairList.SetShowStatusBar(false)
 	pairList.SetFilteringEnabled(false)
-	pairList.Styles.Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("99")).
-		Padding(0, 1)
+	pairList.Styles.Title = styles.ListTitle
 
 	// Set up search results list
 	searchList := list.New([]list.Item{}, delegate, 0, 0)
@@ -158,6 +166,7 @@ func NewModel() Model {
 
 	return Model{
 		view:        ViewMain,
+		styles:      styles,
 		pairList:    pairList,
 		searchInput: ti,
 		searchList:  searchList,

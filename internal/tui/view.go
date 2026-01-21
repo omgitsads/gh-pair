@@ -3,41 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-)
-
-var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("99")).
-			MarginBottom(1)
-
-	subtitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			MarginBottom(1)
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Bold(true)
-
-	successStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42"))
-
-	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	helpKeyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Bold(true)
-
-	helpDescStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("99")).
-			Padding(1, 2)
 )
 
 // View renders the TUI.
@@ -64,19 +29,19 @@ func (m Model) mainView() string {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(titleStyle.Render("🤝 gh-pair"))
+	b.WriteString(m.styles.Title.Render("🤝 gh-pair"))
 	b.WriteString("\n")
 
 	// Hook status
 	if !m.hookInstalled {
-		b.WriteString(errorStyle.Render("⚠ Hook not installed"))
-		b.WriteString(dimStyle.Render(" - press 'i' to install"))
+		b.WriteString(m.styles.Error.Render("⚠ Hook not installed"))
+		b.WriteString(m.styles.Dim.Render(" - press 'i' to install"))
 		b.WriteString("\n\n")
 	}
 
 	// Error display
 	if m.err != nil {
-		b.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		b.WriteString(m.styles.Error.Render("Error: " + m.err.Error()))
 		b.WriteString("\n\n")
 	}
 
@@ -89,9 +54,9 @@ func (m Model) mainView() string {
 
 	// Pair list or empty state
 	if len(m.pairs) == 0 {
-		b.WriteString(subtitleStyle.Render("No pairs configured"))
+		b.WriteString(m.styles.Subtitle.Render("No pairs configured"))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Press 'a' to search users or 't' to browse teams"))
+		b.WriteString(m.styles.Dim.Render("Press 'a' to search users or 't' to browse teams"))
 		b.WriteString("\n")
 	} else {
 		b.WriteString(m.pairList.View())
@@ -107,7 +72,7 @@ func (m Model) mainView() string {
 func (m Model) searchView() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("🔍 Add Pair"))
+	b.WriteString(m.styles.Title.Render("🔍 Add Pair"))
 	b.WriteString("\n\n")
 
 	// Search input
@@ -121,15 +86,15 @@ func (m Model) searchView() string {
 	}
 
 	if m.err != nil {
-		b.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		b.WriteString(m.styles.Error.Render("Error: " + m.err.Error()))
 		b.WriteString("\n\n")
 	}
 
 	// Results label
 	if len(m.searchResults) > 0 {
-		b.WriteString(dimStyle.Render("Search Results:"))
+		b.WriteString(m.styles.Dim.Render("Search Results:"))
 	} else if len(m.searchList.Items()) > 0 {
-		b.WriteString(dimStyle.Render("Recent / Collaborators:"))
+		b.WriteString(m.styles.Dim.Render("Recent / Collaborators:"))
 	}
 	b.WriteString("\n")
 
@@ -138,7 +103,7 @@ func (m Model) searchView() string {
 
 	// Help footer
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("Enter: add • Tab: switch focus • Esc: cancel"))
+	b.WriteString(m.styles.Dim.Render("Enter: add • Tab: switch focus • Esc: cancel"))
 
 	return b.String()
 }
@@ -161,19 +126,19 @@ func (m Model) helpView() string {
 	}
 
 	var content strings.Builder
-	content.WriteString(titleStyle.Render("Keyboard Shortcuts"))
+	content.WriteString(m.styles.Title.Render("Keyboard Shortcuts"))
 	content.WriteString("\n\n")
 
 	for _, h := range help {
 		content.WriteString(fmt.Sprintf("%s  %s\n",
-			helpKeyStyle.Render(fmt.Sprintf("%-12s", h.key)),
-			helpDescStyle.Render(h.desc)))
+			m.styles.HelpKey.Render(fmt.Sprintf("%-12s", h.key)),
+			m.styles.HelpDesc.Render(h.desc)))
 	}
 
 	content.WriteString("\n")
-	content.WriteString(dimStyle.Render("Press Esc or ? to close"))
+	content.WriteString(m.styles.Dim.Render("Press Esc or ? to close"))
 
-	return boxStyle.Render(content.String())
+	return m.styles.Box.Render(content.String())
 }
 
 func (m Model) helpFooter() string {
@@ -192,17 +157,17 @@ func (m Model) helpFooter() string {
 	var parts []string
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s %s",
-			helpKeyStyle.Render(k.key),
-			dimStyle.Render(k.desc)))
+			m.styles.HelpKey.Render(k.key),
+			m.styles.Dim.Render(k.desc)))
 	}
 
-	return strings.Join(parts, dimStyle.Render(" • "))
+	return strings.Join(parts, m.styles.Dim.Render(" • "))
 }
 
 func (m Model) teamsView() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("👥 Your Teams"))
+	b.WriteString(m.styles.Title.Render("👥 Your Teams"))
 	b.WriteString("\n\n")
 
 	// Filter input
@@ -216,24 +181,24 @@ func (m Model) teamsView() string {
 	}
 
 	if m.err != nil {
-		b.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		b.WriteString(m.styles.Error.Render("Error: " + m.err.Error()))
 		b.WriteString("\n\n")
 	}
 
 	if len(m.filteredTeams) == 0 && len(m.teams) > 0 {
-		b.WriteString(dimStyle.Render("No teams match your filter"))
+		b.WriteString(m.styles.Dim.Render("No teams match your filter"))
 		b.WriteString("\n")
 	} else if len(m.teams) == 0 {
-		b.WriteString(subtitleStyle.Render("No teams found"))
+		b.WriteString(m.styles.Subtitle.Render("No teams found"))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("You may not be a member of any GitHub teams"))
+		b.WriteString(m.styles.Dim.Render("You may not be a member of any GitHub teams"))
 		b.WriteString("\n")
 	} else {
 		b.WriteString(m.teamList.View())
 	}
 
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("Enter: select team • Tab: filter • Esc: back"))
+	b.WriteString(m.styles.Dim.Render("Enter: select team • Tab: filter • Esc: back"))
 
 	return b.String()
 }
@@ -245,7 +210,7 @@ func (m Model) teamMembersView() string {
 	if m.selectedTeam != nil {
 		teamName = m.selectedTeam.Name
 	}
-	b.WriteString(titleStyle.Render("👥 " + teamName + " Members"))
+	b.WriteString(m.styles.Title.Render("👥 " + teamName + " Members"))
 	b.WriteString("\n\n")
 
 	// Filter input
@@ -259,22 +224,22 @@ func (m Model) teamMembersView() string {
 	}
 
 	if m.err != nil {
-		b.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		b.WriteString(m.styles.Error.Render("Error: " + m.err.Error()))
 		b.WriteString("\n\n")
 	}
 
 	if len(m.filteredTeamMembers) == 0 && len(m.teamMembers) > 0 {
-		b.WriteString(dimStyle.Render("No members match your filter"))
+		b.WriteString(m.styles.Dim.Render("No members match your filter"))
 		b.WriteString("\n")
 	} else if len(m.teamMembers) == 0 {
-		b.WriteString(dimStyle.Render("No members found"))
+		b.WriteString(m.styles.Dim.Render("No members found"))
 		b.WriteString("\n")
 	} else {
 		b.WriteString(m.searchList.View())
 	}
 
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("Enter: add • Tab: switch focus • Esc: back to teams"))
+	b.WriteString(m.styles.Dim.Render("Enter: add • Tab: switch focus • Esc: back to teams"))
 
 	return b.String()
 }

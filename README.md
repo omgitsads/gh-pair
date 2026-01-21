@@ -62,6 +62,52 @@ Configuration is stored per-repository in `.git/gh-pair/`:
 - `pairs.json` - Current active pairs
 - `recent.json` - Recently used pairs for quick access
 
+## Themes
+
+gh-pair supports multiple color themes. Use `--theme` to switch:
+
+```bash
+gh pair --theme dracula
+gh pair --theme nord
+```
+
+### Available Themes
+
+| Theme | Description |
+|-------|-------------|
+| `default` | Blue and magenta (default) |
+| `dracula` | Purple/pink dark theme |
+| `nord` | Blue arctic palette |
+| `solarized-dark` | Warm dark theme |
+| `solarized-light` | Warm light theme |
+| `catppuccin` | Pastel dark theme |
+
+List all themes: `gh pair theme`
+Preview a theme: `gh pair theme dracula`
+
+### Custom Themes
+
+Create custom themes by adding JSON files to `~/.config/gh-pair/themes/`:
+
+```json
+{
+  "name": "my-theme",
+  "colors": {
+    "primary": "#bd93f9",
+    "secondary": "#ff79c6",
+    "success": "#50fa7b",
+    "error": "#ff5555",
+    "warning": "#ffb86c",
+    "text": "#f8f8f2",
+    "textDim": "#6272a4",
+    "border": "#bd93f9",
+    "accent": "#ff79c6"
+  }
+}
+```
+
+Save as `~/.config/gh-pair/themes/my-theme.json`, then use with `gh pair --theme my-theme`.
+
 ## Requirements
 
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated

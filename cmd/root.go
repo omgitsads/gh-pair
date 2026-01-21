@@ -10,6 +10,8 @@ import (
 	"github.com/omgitsads/gh-pair/internal/tui"
 )
 
+var themeName string
+
 var rootCmd = &cobra.Command{
 	Use:   "gh-pair",
 	Short: "Manage pair programming co-authors for git commits",
@@ -25,8 +27,8 @@ subcommands for quick operations.`,
 			return fmt.Errorf("not a git repository")
 		}
 
-		// Launch the TUI
-		return tui.Run()
+		// Launch the TUI with theme
+		return tui.RunWithTheme(themeName)
 	},
 }
 
@@ -37,6 +39,7 @@ func Execute() error {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "default", "Color theme (default, dracula, nord, solarized-dark, solarized-light, catppuccin)")
 }
 
 // checkGitRepo is a helper that verifies we're in a git repository.
