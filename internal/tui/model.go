@@ -230,7 +230,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, nil
 			}
+			// Reset all search/team state
 			m.view = ViewMain
+			m.searchInput.SetValue("")
+			m.searchResults = nil
+			m.selectedTeam = nil
+			m.teamMembers = nil
+			m.filteredTeamMembers = nil
 			return m, loadPairs
 		}
 		return m, nil
@@ -427,16 +433,10 @@ func (m Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, searchUsers(query)
 			}
 		} else {
-			// Select from search list
+			// Select from search list - fetch full details first
 			if item, ok := m.searchList.SelectedItem().(pairItem); ok {
-				if err := config.AddPair(item.pair); err != nil {
-					m.err = err
-					return m, nil
-				}
-				m.view = ViewMain
-				m.searchInput.SetValue("")
-				m.searchResults = nil
-				return m, loadPairs
+				m.loading = true
+				return m, lookupUser(item.pair.Username)
 			}
 		}
 
@@ -527,18 +527,11 @@ func (m Model) handleTeamMembersKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchInput.Blur()
 			return m, nil
 		}
-		// If input not focused, select from list
+		// If input not focused, select from list - fetch full details first
 		if !m.searchInput.Focused() {
 			if item, ok := m.searchList.SelectedItem().(pairItem); ok {
-				if err := config.AddPair(item.pair); err != nil {
-					m.err = err
-					return m, nil
-				}
-				m.view = ViewMain
-				m.selectedTeam = nil
-				m.teamMembers = nil
-				m.searchInput.SetValue("")
-				return m, loadPairs
+				m.loading = true
+				return m, lookupUser(item.pair.Username)
 			}
 		}
 
