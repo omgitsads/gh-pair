@@ -11,13 +11,22 @@ type Config struct {
 	Theme string `json:"theme"`
 }
 
-// configPath returns the path to the global config file.
-func configPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+// configDir returns the path to the gh-pair config directory (~/.config/gh-pair).
+func configDir() (string, error) {
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(configDir, "gh-pair", "config.json"), nil
+	return filepath.Join(home, ".config", "gh-pair"), nil
+}
+
+// configPath returns the path to the global config file.
+func configPath() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.json"), nil
 }
 
 // LoadConfig loads the global configuration from ~/.config/gh-pair/config.json.

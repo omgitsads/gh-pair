@@ -76,30 +76,30 @@ var (
 	SolarizedDarkTheme = Theme{
 		Name: "solarized-dark",
 		Colors: Colors{
-			Primary:   "#268bd2", // Blue
-			Secondary: "#2aa198", // Cyan
-			Success:   "#859900", // Green
-			Error:     "#dc322f", // Red
-			Warning:   "#b58900", // Yellow
-			Text:      "#839496", // Base0
-			TextDim:   "#586e75", // Base01
-			Border:    "#268bd2", // Blue
-			Accent:    "#d33682", // Magenta
+			Primary:   "#268bd2", // blue
+			Secondary: "#2aa198", // cyan
+			Success:   "#859900", // green
+			Error:     "#dc322f", // red
+			Warning:   "#b58900", // yellow
+			Text:      "#839496", // base0 (light text on dark bg)
+			TextDim:   "#586e75", // base01 (dimmed on dark bg)
+			Border:    "#6c71c4", // violet
+			Accent:    "#d33682", // magenta
 		},
 	}
 
 	SolarizedLightTheme = Theme{
 		Name: "solarized-light",
 		Colors: Colors{
-			Primary:   "#268bd2", // Blue
-			Secondary: "#2aa198", // Cyan
-			Success:   "#859900", // Green
-			Error:     "#dc322f", // Red
-			Warning:   "#b58900", // Yellow
-			Text:      "#657b83", // Base00
-			TextDim:   "#93a1a1", // Base1
-			Border:    "#268bd2", // Blue
-			Accent:    "#d33682", // Magenta
+			Primary:   "#268bd2", // blue
+			Secondary: "#2aa198", // cyan
+			Success:   "#859900", // green
+			Error:     "#dc322f", // red
+			Warning:   "#b58900", // yellow
+			Text:      "#657b83", // base00 (dark text on light bg)
+			TextDim:   "#93a1a1", // base1 (dimmed on light bg)
+			Border:    "#6c71c4", // violet
+			Accent:    "#d33682", // magenta
 		},
 	}
 
@@ -156,12 +156,12 @@ func GetTheme(name string) Theme {
 
 // loadCustomTheme loads a theme from ~/.config/gh-pair/themes/{name}.json
 func loadCustomTheme(name string) (Theme, error) {
-	configDir, err := os.UserConfigDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return Theme{}, err
 	}
 
-	themePath := filepath.Join(configDir, "gh-pair", "themes", name+".json")
+	themePath := filepath.Join(home, ".config", "gh-pair", "themes", name+".json")
 	data, err := os.ReadFile(themePath)
 	if err != nil {
 		return Theme{}, err
@@ -175,14 +175,14 @@ func loadCustomTheme(name string) (Theme, error) {
 	return theme, nil
 }
 
-// ListCustomThemes returns names of custom themes in the config directory.
+// ListCustomThemes returns names of custom themes in ~/.config/gh-pair/themes/.
 func ListCustomThemes() []string {
-	configDir, err := os.UserConfigDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
 	}
 
-	themesDir := filepath.Join(configDir, "gh-pair", "themes")
+	themesDir := filepath.Join(home, ".config", "gh-pair", "themes")
 	entries, err := os.ReadDir(themesDir)
 	if err != nil {
 		return nil

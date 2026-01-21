@@ -95,10 +95,7 @@ Preview a theme: `gh pair theme dracula`
 
 ### Custom Themes
 
-Create custom themes by adding JSON files to your config directory:
-- **macOS**: `~/Library/Application Support/gh-pair/themes/`
-- **Linux**: `~/.config/gh-pair/themes/`
-- **Windows**: `%AppData%\gh-pair\themes\`
+Create custom themes by adding JSON files to `~/.config/gh-pair/themes/`:
 
 Example theme file:
 
