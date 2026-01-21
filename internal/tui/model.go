@@ -23,7 +23,17 @@ type View int
 const (
 	ViewMain View = iota
 	ViewSearch
+	ViewTeams
+	ViewTeamMembers
 	ViewHelp
+)
+
+// SearchTab represents which tab is active in search view.
+type SearchTab int
+
+const (
+	TabUsers SearchTab = iota
+	TabTeams
 )
 
 // Model is the main TUI model.
@@ -34,9 +44,17 @@ type Model struct {
 	collaborators []config.Pair
 	searchResults []config.Pair
 
+	// Team-related state
+	teams         []github.Team
+	selectedTeam  *github.Team
+	teamMembers   []config.Pair
+	filteredTeamMembers []config.Pair
+	searchTab     SearchTab
+
 	pairList      list.Model
 	searchInput   textinput.Model
 	searchList    list.Model
+	teamList      list.Model
 	spinner       spinner.Model
 	loading       bool
 	hookInstalled bool
@@ -58,6 +76,15 @@ type pairItem struct {
 func (i pairItem) Title() string       { return "@" + i.pair.Username }
 func (i pairItem) Description() string { return i.pair.Name + " <" + i.pair.Email + ">" }
 func (i pairItem) FilterValue() string { return i.pair.Username + " " + i.pair.Name }
+
+// teamItem implements list.Item for teams.
+type teamItem struct {
+	team github.Team
+}
+
+func (i teamItem) Title() string       { return i.team.Name }
+func (i teamItem) Description() string { return i.team.Org + "/" + i.team.Slug }
+func (i teamItem) FilterValue() string { return i.team.Name + " " + i.team.Slug }
 
 // Messages
 type (
@@ -83,6 +110,12 @@ type (
 	debounceTickMsg struct {
 		query   string
 		timerID int
+	}
+	teamsLoadedMsg struct {
+		teams []github.Team
+	}
+	teamMembersLoadedMsg struct {
+		members []config.Pair
 	}
 )
 
@@ -116,13 +149,21 @@ func NewModel() Model {
 	searchList.SetShowStatusBar(false)
 	searchList.SetFilteringEnabled(false)
 
+	// Set up team list
+	teamList := list.New([]list.Item{}, delegate, 0, 0)
+	teamList.Title = "Your Teams"
+	teamList.SetShowStatusBar(false)
+	teamList.SetFilteringEnabled(false)
+
 	return Model{
 		view:        ViewMain,
 		pairList:    pairList,
 		searchInput: ti,
 		searchList:  searchList,
+		teamList:    teamList,
 		spinner:     s,
 		loading:     true,
+		searchTab:   TabUsers,
 	}
 }
 
@@ -148,6 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.pairList.SetSize(msg.Width-4, msg.Height-8)
 		m.searchList.SetSize(msg.Width-4, msg.Height-12)
+		m.teamList.SetSize(msg.Width-4, msg.Height-12)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -195,6 +237,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		m.loading = false
+		return m, nil
+
+	case teamsLoadedMsg:
+		m.teams = msg.teams
+		m.loading = false
+		m.updateTeamList()
+		return m, nil
+
+	case teamMembersLoadedMsg:
+		m.teamMembers = msg.members
+		m.filteredTeamMembers = msg.members
+		m.loading = false
+		m.updateSearchList()
 		return m, nil
 
 	case debounceTickMsg:
@@ -246,13 +301,24 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = ViewMain
 		m.searchInput.SetValue("")
 		m.searchResults = nil
+		m.selectedTeam = nil
+		m.teamMembers = nil
 		return m, nil
 
 	case "esc":
+		if m.view == ViewTeamMembers {
+			m.view = ViewTeams
+			m.selectedTeam = nil
+			m.teamMembers = nil
+			m.searchInput.SetValue("")
+			return m, nil
+		}
 		if m.view != ViewMain {
 			m.view = ViewMain
 			m.searchInput.SetValue("")
 			m.searchResults = nil
+			m.selectedTeam = nil
+			m.teamMembers = nil
 			return m, nil
 		}
 		return m, tea.Quit
@@ -274,6 +340,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleMainKeys(msg)
 	case ViewSearch:
 		return m.handleSearchKeys(msg)
+	case ViewTeams:
+		return m.handleTeamsKeys(msg)
+	case ViewTeamMembers:
+		return m.handleTeamMembersKeys(msg)
 	case ViewHelp:
 		if msg.String() == "enter" || msg.String() == "esc" || msg.String() == "?" {
 			m.view = ViewMain
@@ -288,13 +358,21 @@ func (m Model) handleMainKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "a", "/":
 		m.view = ViewSearch
+		m.searchTab = TabUsers
 		m.searchInput.Focus()
 		m.searchInput.SetValue("")
+		m.searchInput.Placeholder = "Search GitHub users..."
 		m.searchResults = nil
 		m.lastQuery = ""
 		m.err = nil
 		m.updateSearchList() // Show recent/collaborators initially
 		return m, nil
+
+	case "t":
+		m.view = ViewTeams
+		m.loading = true
+		m.err = nil
+		return m, loadTeams
 
 	case "d", "backspace", "delete":
 		if item, ok := m.pairList.SelectedItem().(pairItem); ok {
@@ -395,6 +473,82 @@ func (m Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m Model) handleTeamsKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		if item, ok := m.teamList.SelectedItem().(teamItem); ok {
+			m.selectedTeam = &item.team
+			m.view = ViewTeamMembers
+			m.loading = true
+			m.searchInput.SetValue("")
+			m.searchInput.Placeholder = "Filter team members..."
+			m.searchInput.Blur() // Start with list focused, not input
+			return m, loadTeamMembers(item.team.Org, item.team.Slug)
+		}
+
+	case "up", "down":
+		var cmd tea.Cmd
+		m.teamList, cmd = m.teamList.Update(msg)
+		return m, cmd
+	}
+
+	var cmd tea.Cmd
+	m.teamList, cmd = m.teamList.Update(msg)
+	return m, cmd
+}
+
+func (m Model) handleTeamMembersKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		// If input is focused and empty, blur it to allow list navigation
+		if m.searchInput.Focused() && m.searchInput.Value() == "" {
+			m.searchInput.Blur()
+			return m, nil
+		}
+		// If input not focused, select from list
+		if !m.searchInput.Focused() {
+			if item, ok := m.searchList.SelectedItem().(pairItem); ok {
+				if err := config.AddPair(item.pair); err != nil {
+					m.err = err
+					return m, nil
+				}
+				m.view = ViewMain
+				m.selectedTeam = nil
+				m.teamMembers = nil
+				m.searchInput.SetValue("")
+				return m, loadPairs
+			}
+		}
+
+	case "tab":
+		if m.searchInput.Focused() {
+			m.searchInput.Blur()
+		} else {
+			m.searchInput.Focus()
+		}
+		return m, nil
+
+	case "up", "down":
+		// Always allow arrow key navigation in the list
+		var cmd tea.Cmd
+		m.searchList, cmd = m.searchList.Update(msg)
+		return m, cmd
+	}
+
+	// Update text input and filter team members
+	oldValue := m.searchInput.Value()
+	var cmd tea.Cmd
+	m.searchInput, cmd = m.searchInput.Update(msg)
+
+	newValue := m.searchInput.Value()
+	if newValue != oldValue {
+		m.filterTeamMembers(newValue)
+		m.updateSearchList()
+	}
+
+	return m, cmd
+}
+
 func (m *Model) updatePairList() {
 	items := make([]list.Item, len(m.pairs))
 	for i, p := range m.pairs {
@@ -405,6 +559,15 @@ func (m *Model) updatePairList() {
 
 func (m *Model) updateSearchList() {
 	var items []list.Item
+
+	// If viewing team members, show filtered team members
+	if m.view == ViewTeamMembers {
+		for _, p := range m.filteredTeamMembers {
+			items = append(items, pairItem{pair: p})
+		}
+		m.searchList.SetItems(items)
+		return
+	}
 
 	if len(m.searchResults) > 0 {
 		for _, p := range m.searchResults {
@@ -433,6 +596,31 @@ func (m *Model) updateSearchList() {
 	}
 
 	m.searchList.SetItems(items)
+}
+
+func (m *Model) updateTeamList() {
+	items := make([]list.Item, len(m.teams))
+	for i, t := range m.teams {
+		items[i] = teamItem{team: t}
+	}
+	m.teamList.SetItems(items)
+}
+
+func (m *Model) filterTeamMembers(query string) {
+	if query == "" {
+		m.filteredTeamMembers = m.teamMembers
+		return
+	}
+
+	query = strings.ToLower(query)
+	filtered := make([]config.Pair, 0)
+	for _, p := range m.teamMembers {
+		if strings.Contains(strings.ToLower(p.Username), query) ||
+			strings.Contains(strings.ToLower(p.Name), query) {
+			filtered = append(filtered, p)
+		}
+	}
+	m.filteredTeamMembers = filtered
 }
 
 // Commands
@@ -471,4 +659,22 @@ func scheduleDebounce(query string, timerID int) tea.Cmd {
 	return tea.Tick(debounceDelay, func(t time.Time) tea.Msg {
 		return debounceTickMsg{query: query, timerID: timerID}
 	})
+}
+
+func loadTeams() tea.Msg {
+	teams, err := github.GetUserTeams()
+	if err != nil {
+		return errMsg{err: err}
+	}
+	return teamsLoadedMsg{teams: teams}
+}
+
+func loadTeamMembers(org, slug string) tea.Cmd {
+	return func() tea.Msg {
+		members, err := github.GetTeamMembers(org, slug)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		return teamMembersLoadedMsg{members: members}
+	}
 }

@@ -51,6 +51,10 @@ func (m Model) View() string {
 		return m.helpView()
 	case ViewSearch:
 		return m.searchView()
+	case ViewTeams:
+		return m.teamsView()
+	case ViewTeamMembers:
+		return m.teamMembersView()
 	default:
 		return m.mainView()
 	}
@@ -87,7 +91,7 @@ func (m Model) mainView() string {
 	if len(m.pairs) == 0 {
 		b.WriteString(subtitleStyle.Render("No pairs configured"))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Press 'a' to add a pair"))
+		b.WriteString(dimStyle.Render("Press 'a' to search users or 't' to browse teams"))
 		b.WriteString("\n")
 	} else {
 		b.WriteString(m.pairList.View())
@@ -144,7 +148,8 @@ func (m Model) helpView() string {
 		key  string
 		desc string
 	}{
-		{"a, /", "Add a new pair"},
+		{"a, /", "Search GitHub users"},
+		{"t", "Browse your teams"},
 		{"d, Delete", "Remove selected pair"},
 		{"c", "Clear all pairs"},
 		{"i", "Install git hook"},
@@ -176,7 +181,8 @@ func (m Model) helpFooter() string {
 		key  string
 		desc string
 	}{
-		{"a", "add"},
+		{"a", "search"},
+		{"t", "teams"},
 		{"d", "remove"},
 		{"c", "clear"},
 		{"?", "help"},
@@ -191,4 +197,77 @@ func (m Model) helpFooter() string {
 	}
 
 	return strings.Join(parts, dimStyle.Render(" • "))
+}
+
+func (m Model) teamsView() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("👥 Your Teams"))
+	b.WriteString("\n\n")
+
+	if m.loading {
+		b.WriteString(m.spinner.View())
+		b.WriteString(" Loading teams...\n")
+		return b.String()
+	}
+
+	if m.err != nil {
+		b.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		b.WriteString("\n\n")
+	}
+
+	if len(m.teams) == 0 {
+		b.WriteString(subtitleStyle.Render("No teams found"))
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("You may not be a member of any GitHub teams"))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(m.teamList.View())
+	}
+
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("Enter: select team • Esc: back"))
+
+	return b.String()
+}
+
+func (m Model) teamMembersView() string {
+	var b strings.Builder
+
+	teamName := ""
+	if m.selectedTeam != nil {
+		teamName = m.selectedTeam.Name
+	}
+	b.WriteString(titleStyle.Render("👥 " + teamName + " Members"))
+	b.WriteString("\n\n")
+
+	// Filter input
+	b.WriteString(m.searchInput.View())
+	b.WriteString("\n\n")
+
+	if m.loading {
+		b.WriteString(m.spinner.View())
+		b.WriteString(" Loading members...\n")
+		return b.String()
+	}
+
+	if m.err != nil {
+		b.WriteString(errorStyle.Render("Error: " + m.err.Error()))
+		b.WriteString("\n\n")
+	}
+
+	if len(m.filteredTeamMembers) == 0 && len(m.teamMembers) > 0 {
+		b.WriteString(dimStyle.Render("No members match your filter"))
+		b.WriteString("\n")
+	} else if len(m.teamMembers) == 0 {
+		b.WriteString(dimStyle.Render("No members found"))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(m.searchList.View())
+	}
+
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("Enter: add • Tab: switch focus • Esc: back to teams"))
+
+	return b.String()
 }

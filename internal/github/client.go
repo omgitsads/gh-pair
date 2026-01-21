@@ -146,3 +146,78 @@ func GetRepoCollaborators() ([]config.Pair, error) {
 
 	return pairs, nil
 }
+
+// Team represents a GitHub team.
+type Team struct {
+ID          int    `json:"id"`
+Slug        string `json:"slug"`
+Name        string `json:"name"`
+Description string `json:"description"`
+Org         string `json:"-"` // populated after fetch
+}
+
+// GetUserTeams fetches all teams the authenticated user belongs to.
+func GetUserTeams() ([]Team, error) {
+cmd := exec.Command("gh", "api", "user/teams?per_page=100")
+output, err := cmd.Output()
+if err != nil {
+return nil, fmt.Errorf("failed to get teams: %w", err)
+}
+
+var teams []struct {
+ID           int    `json:"id"`
+Slug         string `json:"slug"`
+Name         string `json:"name"`
+Description  string `json:"description"`
+Organization struct {
+Login string `json:"login"`
+} `json:"organization"`
+}
+if err := json.Unmarshal(output, &teams); err != nil {
+return nil, fmt.Errorf("failed to parse teams: %w", err)
+}
+
+result := make([]Team, 0, len(teams))
+for _, t := range teams {
+result = append(result, Team{
+ID:          t.ID,
+Slug:        t.Slug,
+Name:        t.Name,
+Description: t.Description,
+Org:         t.Organization.Login,
+})
+}
+
+return result, nil
+}
+
+// GetTeamMembers fetches all members of a team.
+func GetTeamMembers(org, teamSlug string) ([]config.Pair, error) {
+cmd := exec.Command("gh", "api", fmt.Sprintf("orgs/%s/teams/%s/members?per_page=100", org, teamSlug))
+output, err := cmd.Output()
+if err != nil {
+return nil, fmt.Errorf("failed to get team members: %w", err)
+}
+
+var members []userResponse
+if err := json.Unmarshal(output, &members); err != nil {
+return nil, fmt.Errorf("failed to parse team members: %w", err)
+}
+
+pairs := make([]config.Pair, 0, len(members))
+for _, user := range members {
+email := fmt.Sprintf("%d+%s@users.noreply.github.com", user.ID, user.Login)
+name := user.Login
+if user.Name != "" {
+name = user.Name
+}
+
+pairs = append(pairs, config.Pair{
+Username: user.Login,
+Name:     name,
+Email:    email,
+})
+}
+
+return pairs, nil
+}
