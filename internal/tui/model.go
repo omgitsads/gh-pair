@@ -45,11 +45,12 @@ type Model struct {
 	searchResults []config.Pair
 
 	// Team-related state
-	teams         []github.Team
-	selectedTeam  *github.Team
-	teamMembers   []config.Pair
+	teams           []github.Team
+	filteredTeams   []github.Team
+	selectedTeam    *github.Team
+	teamMembers     []config.Pair
 	filteredTeamMembers []config.Pair
-	searchTab     SearchTab
+	searchTab       SearchTab
 
 	pairList      list.Model
 	searchInput   textinput.Model
@@ -241,6 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case teamsLoadedMsg:
 		m.teams = msg.teams
+		m.filteredTeams = msg.teams
 		m.loading = false
 		m.updateTeamList()
 		return m, nil
@@ -372,6 +374,9 @@ func (m Model) handleMainKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = ViewTeams
 		m.loading = true
 		m.err = nil
+		m.searchInput.SetValue("")
+		m.searchInput.Placeholder = "Filter teams..."
+		m.searchInput.Blur()
 		return m, loadTeams
 
 	case "d", "backspace", "delete":
@@ -486,14 +491,31 @@ func (m Model) handleTeamsKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, loadTeamMembers(item.team.Org, item.team.Slug)
 		}
 
+	case "tab":
+		if m.searchInput.Focused() {
+			m.searchInput.Blur()
+		} else {
+			m.searchInput.Focus()
+		}
+		return m, nil
+
 	case "up", "down":
 		var cmd tea.Cmd
 		m.teamList, cmd = m.teamList.Update(msg)
 		return m, cmd
 	}
 
+	// Update text input and filter teams
+	oldValue := m.searchInput.Value()
 	var cmd tea.Cmd
-	m.teamList, cmd = m.teamList.Update(msg)
+	m.searchInput, cmd = m.searchInput.Update(msg)
+
+	newValue := m.searchInput.Value()
+	if newValue != oldValue {
+		m.filterTeams(newValue)
+		m.updateTeamList()
+	}
+
 	return m, cmd
 }
 
@@ -599,11 +621,29 @@ func (m *Model) updateSearchList() {
 }
 
 func (m *Model) updateTeamList() {
-	items := make([]list.Item, len(m.teams))
-	for i, t := range m.teams {
+	items := make([]list.Item, len(m.filteredTeams))
+	for i, t := range m.filteredTeams {
 		items[i] = teamItem{team: t}
 	}
 	m.teamList.SetItems(items)
+}
+
+func (m *Model) filterTeams(query string) {
+	if query == "" {
+		m.filteredTeams = m.teams
+		return
+	}
+
+	query = strings.ToLower(query)
+	filtered := make([]github.Team, 0)
+	for _, t := range m.teams {
+		if strings.Contains(strings.ToLower(t.Name), query) ||
+			strings.Contains(strings.ToLower(t.Slug), query) ||
+			strings.Contains(strings.ToLower(t.Org), query) {
+			filtered = append(filtered, t)
+		}
+	}
+	m.filteredTeams = filtered
 }
 
 func (m *Model) filterTeamMembers(query string) {

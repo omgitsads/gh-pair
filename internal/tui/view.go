@@ -205,6 +205,10 @@ func (m Model) teamsView() string {
 	b.WriteString(titleStyle.Render("👥 Your Teams"))
 	b.WriteString("\n\n")
 
+	// Filter input
+	b.WriteString(m.searchInput.View())
+	b.WriteString("\n\n")
+
 	if m.loading {
 		b.WriteString(m.spinner.View())
 		b.WriteString(" Loading teams...\n")
@@ -216,7 +220,10 @@ func (m Model) teamsView() string {
 		b.WriteString("\n\n")
 	}
 
-	if len(m.teams) == 0 {
+	if len(m.filteredTeams) == 0 && len(m.teams) > 0 {
+		b.WriteString(dimStyle.Render("No teams match your filter"))
+		b.WriteString("\n")
+	} else if len(m.teams) == 0 {
 		b.WriteString(subtitleStyle.Render("No teams found"))
 		b.WriteString("\n")
 		b.WriteString(dimStyle.Render("You may not be a member of any GitHub teams"))
@@ -226,7 +233,7 @@ func (m Model) teamsView() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("Enter: select team • Esc: back"))
+	b.WriteString(dimStyle.Render("Enter: select team • Tab: filter • Esc: back"))
 
 	return b.String()
 }
