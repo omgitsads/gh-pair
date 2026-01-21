@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -13,6 +14,8 @@ import (
 	"github.com/omgitsads/gh-pair/internal/github"
 	"github.com/omgitsads/gh-pair/internal/hook"
 )
+
+const debounceDelay = 300 * time.Millisecond
 
 // View represents the current view in the TUI.
 type View int
@@ -39,6 +42,10 @@ type Model struct {
 	hookInstalled bool
 	err           error
 
+	// Debounce state for autocomplete
+	lastQuery     string
+	debounceTimer int // incremented each time we schedule a debounce
+
 	width  int
 	height int
 }
@@ -63,6 +70,7 @@ type (
 	}
 	searchResultsMsg struct {
 		results []config.Pair
+		query   string // track which query this result is for
 	}
 	userLookedUpMsg struct {
 		pair *config.Pair
@@ -70,6 +78,11 @@ type (
 	}
 	errMsg struct {
 		err error
+	}
+	// debounceTickMsg is sent after the debounce delay
+	debounceTickMsg struct {
+		query   string
+		timerID int
 	}
 )
 
@@ -155,9 +168,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case searchResultsMsg:
-		m.searchResults = msg.results
-		m.loading = false
-		m.updateSearchList()
+		// Only update if this result matches the current query
+		if msg.query == m.lastQuery {
+			m.searchResults = msg.results
+			m.loading = false
+			m.updateSearchList()
+		}
 		return m, nil
 
 	case userLookedUpMsg:
@@ -180,6 +196,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		m.loading = false
 		return m, nil
+
+	case debounceTickMsg:
+		// Only trigger search if this is the latest timer and query matches
+		if msg.timerID == m.debounceTimer && msg.query == m.searchInput.Value() {
+			query := strings.TrimSpace(msg.query)
+			if len(query) >= 2 {
+				m.loading = true
+				m.lastQuery = query
+				return m, searchUsers(query)
+			}
+		}
+		return m, nil
 	}
 
 	// Update sub-models
@@ -190,8 +218,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case ViewSearch:
 		var cmd tea.Cmd
+		oldValue := m.searchInput.Value()
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		cmds = append(cmds, cmd)
+
+		// Check if input changed - schedule debounced search
+		newValue := m.searchInput.Value()
+		if newValue != oldValue && m.searchInput.Focused() {
+			m.debounceTimer++
+			cmds = append(cmds, scheduleDebounce(newValue, m.debounceTimer))
+		}
+
 		m.searchList, cmd = m.searchList.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -252,6 +289,10 @@ func (m Model) handleMainKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "a", "/":
 		m.view = ViewSearch
 		m.searchInput.Focus()
+		m.searchInput.SetValue("")
+		m.searchResults = nil
+		m.lastQuery = ""
+		m.err = nil
 		m.updateSearchList() // Show recent/collaborators initially
 		return m, nil
 
@@ -332,8 +373,25 @@ func (m Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Update text input and check for changes to trigger debounced search
+	oldValue := m.searchInput.Value()
 	var cmd tea.Cmd
 	m.searchInput, cmd = m.searchInput.Update(msg)
+
+	// Schedule debounced search if input changed
+	newValue := m.searchInput.Value()
+	if newValue != oldValue && m.searchInput.Focused() {
+		m.debounceTimer++
+		if newValue == "" {
+			// Clear results immediately when input is empty
+			m.searchResults = nil
+			m.lastQuery = ""
+			m.updateSearchList()
+			return m, cmd
+		}
+		return m, tea.Batch(cmd, scheduleDebounce(newValue, m.debounceTimer))
+	}
+
 	return m, cmd
 }
 
@@ -398,7 +456,7 @@ func searchUsers(query string) tea.Cmd {
 		if err != nil {
 			return errMsg{err: err}
 		}
-		return searchResultsMsg{results: results}
+		return searchResultsMsg{results: results, query: query}
 	}
 }
 
@@ -407,4 +465,10 @@ func lookupUser(username string) tea.Cmd {
 		pair, err := github.LookupUser(username)
 		return userLookedUpMsg{pair: pair, err: err}
 	}
+}
+
+func scheduleDebounce(query string, timerID int) tea.Cmd {
+	return tea.Tick(debounceDelay, func(t time.Time) tea.Msg {
+		return debounceTickMsg{query: query, timerID: timerID}
+	})
 }
