@@ -9,3 +9,5 @@ gh-pair*
 
 # OS
 .DS_Store
+# Added by goreleaser init:
+dist/
