@@ -47,14 +47,18 @@ fi
 
 # Extract co-author lines from JSON
 # Uses simple text processing to avoid requiring jq
-COAUTHORS=$(grep -E '"(name|email)"' "$CONFIG_FILE" | \
-  sed 's/.*"name": *"\([^"]*\)".*/\1/' | \
-  paste - - | \
-  while read name email; do
-    # Clean up the email extraction
-    clean_email=$(echo "$email" | sed 's/.*"email": *"\([^"]*\)".*/\1/')
-    echo "Co-Authored-By: $name <$clean_email>"
-  done)
+COAUTHORS=$(awk '
+  /"name":/ { 
+    gsub(/.*"name": *"/, ""); 
+    gsub(/".*/, ""); 
+    name = $0 
+  }
+  /"email":/ { 
+    gsub(/.*"email": *"/, ""); 
+    gsub(/".*/, ""); 
+    print "Co-Authored-By: " name " <" $0 ">" 
+  }
+' "$CONFIG_FILE")
 
 # If no co-authors found, exit
 if [ -z "$COAUTHORS" ]; then
