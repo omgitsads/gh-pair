@@ -4,7 +4,7 @@ This document helps AI coding assistants understand and work effectively with th
 
 ## Project Overview
 
-**gh-pair** is a GitHub CLI extension that manages pair programming co-authors. It automatically adds `Co-Authored-By` trailers to git commit messages via a `prepare-commit-msg` hook.
+**gh-pair** is a GitHub CLI extension that manages pair programming co-authors. It automatically adds `Co-Authored-By` trailers to git commit messages via a `commit-msg` hook.
 
 ### Tech Stack
 
@@ -30,7 +30,7 @@ gh-pair/
 │   ├── config/config.go         # Pair CRUD, JSON persistence
 │   ├── git/repo.go              # Git repository utilities
 │   ├── github/client.go         # GitHub API via gh CLI
-│   ├── hook/hook.go             # prepare-commit-msg hook management
+│   ├── hook/hook.go             # commit-msg hook management
 │   └── tui/                     # Bubble Tea TUI
 │       ├── app.go               # Run() entry point
 │       ├── model.go             # Model struct, Init, Update
@@ -137,5 +137,5 @@ gh extension remove pair && gh extension install .
 
 - Must be run inside a git repository (checks `git rev-parse --is-inside-work-tree`)
 - GitHub API requires `gh` CLI to be installed and authenticated
-- The `prepare-commit-msg` hook uses shell script (not Go) for portability
+- The `commit-msg` hook uses shell script (not Go) for portability
 - Team features require org membership and appropriate permissions

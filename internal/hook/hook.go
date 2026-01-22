@@ -15,18 +15,8 @@ const hookScript = `#!/bin/sh
 #
 # Arguments:
 #   $1 - Path to the temporary file containing the commit message
-#   $2 - Source of the commit message (message, template, merge, squash, commit)
-#   $3 - SHA1 of commit (only when source is "commit")
 
 COMMIT_MSG_FILE="$1"
-COMMIT_SOURCE="$2"
-
-# Only add co-authors for regular commits (not merges, squashes, or amends)
-case "$COMMIT_SOURCE" in
-merge | squash | commit)
-  exit 0
-  ;;
-esac
 
 # Path to the pairs config file
 GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
@@ -42,12 +32,20 @@ if ! grep -q '"username"' "$CONFIG_FILE" 2>/dev/null; then
   exit 0
 fi
 
+# Get the commit message without comments and whitespace
+MSG_CONTENT=$(grep -v '^#' "$COMMIT_MSG_FILE" | grep -v '^[[:space:]]*$' || true)
+
+# If message is empty (user aborted), exit without adding trailers
+if [ -z "$MSG_CONTENT" ]; then
+  exit 0
+fi
+
 # Check if co-authors are already present in the commit message
 if grep -q "^Co-Authored-By:" "$COMMIT_MSG_FILE" 2>/dev/null; then
   exit 0
 fi
 
-# Extract co-author lines from JSON and prepend to commit message
+# Extract co-author lines from JSON
 # Uses simple text processing to avoid requiring jq
 COAUTHORS=$(grep -E '"(name|email)"' "$CONFIG_FILE" | \
   sed 's/.*"name": *"\([^"]*\)".*/\1/' | \
@@ -63,22 +61,18 @@ if [ -z "$COAUTHORS" ]; then
   exit 0
 fi
 
-# Read original message
-ORIGINAL_MSG=$(cat "$COMMIT_MSG_FILE")
-
-# Write co-authors followed by blank line and original message
+# Append co-authors to the end of the commit message with a blank line separator
 {
-  echo "$COAUTHORS"
   echo ""
-  echo "$ORIGINAL_MSG"
-} > "$COMMIT_MSG_FILE"
+  echo "$COAUTHORS"
+} >> "$COMMIT_MSG_FILE"
 
 exit 0
 `
 
 const hookMarker = "# gh-pair: Adds co-author trailers to commits"
 
-// Install installs the prepare-commit-msg hook.
+// Install installs the commit-msg hook.
 func Install() error {
 	hooksDir, err := git.HooksDir()
 	if err != nil {
@@ -89,7 +83,13 @@ func Install() error {
 		return err
 	}
 
-	hookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	// Remove old prepare-commit-msg hook if it's ours (migration)
+	oldHookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	if content, err := os.ReadFile(oldHookPath); err == nil && isOurHook(string(content)) {
+		os.Remove(oldHookPath)
+	}
+
+	hookPath := filepath.Join(hooksDir, "commit-msg")
 
 	// Check if hook already exists
 	if _, err := os.Stat(hookPath); err == nil {
@@ -117,14 +117,20 @@ func Install() error {
 	return nil
 }
 
-// Uninstall removes the prepare-commit-msg hook if it's ours.
+// Uninstall removes the commit-msg hook if it's ours.
 func Uninstall() error {
 	hooksDir, err := git.HooksDir()
 	if err != nil {
 		return err
 	}
 
-	hookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	// Also clean up old prepare-commit-msg hook if it's ours
+	oldHookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	if content, err := os.ReadFile(oldHookPath); err == nil && isOurHook(string(content)) {
+		os.Remove(oldHookPath)
+	}
+
+	hookPath := filepath.Join(hooksDir, "commit-msg")
 
 	// Check if hook exists
 	content, err := os.ReadFile(hookPath)
@@ -163,13 +169,51 @@ func IsInstalled() bool {
 		return false
 	}
 
-	hookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	hookPath := filepath.Join(hooksDir, "commit-msg")
 	content, err := os.ReadFile(hookPath)
 	if err != nil {
 		return false
 	}
 
 	return isOurHook(string(content))
+}
+
+// HasOldHook checks if the old prepare-commit-msg hook exists and is ours.
+func HasOldHook() bool {
+	hooksDir, err := git.HooksDir()
+	if err != nil {
+		return false
+	}
+
+	oldHookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	content, err := os.ReadFile(oldHookPath)
+	if err != nil {
+		return false
+	}
+
+	return isOurHook(string(content))
+}
+
+// RemoveOldHook removes the old prepare-commit-msg hook if it's ours.
+func RemoveOldHook() error {
+	hooksDir, err := git.HooksDir()
+	if err != nil {
+		return err
+	}
+
+	oldHookPath := filepath.Join(hooksDir, "prepare-commit-msg")
+	content, err := os.ReadFile(oldHookPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	if isOurHook(string(content)) {
+		return os.Remove(oldHookPath)
+	}
+	return nil
 }
 
 func isOurHook(content string) bool {

@@ -39,7 +39,7 @@ gh pair clear
 
 ## How It Works
 
-1. Run `gh pair init` in your repository to install the `prepare-commit-msg` hook
+1. Run `gh pair init` in your repository to install the `commit-msg` hook
 2. Add collaborators you're pairing with using `gh pair add @username` or the TUI
 3. Your commits will automatically include `Co-Authored-By` trailers
 
