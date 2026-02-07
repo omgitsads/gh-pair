@@ -191,9 +191,19 @@ Org:         t.Organization.Login,
 return result, nil
 }
 
+// GetAuthenticatedUser returns the username of the authenticated user.
+func GetAuthenticatedUser() (string, error) {
+	cmd := exec.Command("gh", "api", "user", "--jq", ".login")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get authenticated user: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 // GetTeamMembers fetches all members of a team.
 func GetTeamMembers(org, teamSlug string) ([]config.Pair, error) {
-cmd := exec.Command("gh", "api", fmt.Sprintf("orgs/%s/teams/%s/members?per_page=100", org, teamSlug))
+	cmd := exec.Command("gh", "api", fmt.Sprintf("orgs/%s/teams/%s/members?per_page=100", org, teamSlug))
 output, err := cmd.Output()
 if err != nil {
 return nil, fmt.Errorf("failed to get team members: %w", err)

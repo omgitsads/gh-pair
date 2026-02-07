@@ -43,6 +43,7 @@ type Model struct {
 	recentPairs   []config.Pair
 	collaborators []config.Pair
 	searchResults []config.Pair
+	currentUser   string // authenticated GitHub username (filtered from results)
 
 	// Team-related state
 	teams           []github.Team
@@ -61,6 +62,7 @@ type Model struct {
 	teamList      list.Model
 	spinner       spinner.Model
 	loading       bool
+	focusInput    bool // request focus on search input after loading
 	hookInstalled bool
 	err           error
 
@@ -98,6 +100,9 @@ type (
 	}
 	collaboratorsLoadedMsg struct {
 		collaborators []config.Pair
+	}
+	currentUserLoadedMsg struct {
+		username string
 	}
 	searchResultsMsg struct {
 		results []config.Pair
@@ -183,6 +188,7 @@ func (m Model) Init() tea.Cmd {
 		m.spinner.Tick,
 		loadPairs,
 		loadCollaborators,
+		loadCurrentUser,
 	)
 }
 
@@ -216,13 +222,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case collaboratorsLoadedMsg:
-		m.collaborators = msg.collaborators
+		m.collaborators = filterOutUser(msg.collaborators, m.currentUser)
+		return m, nil
+
+	case currentUserLoadedMsg:
+		m.currentUser = msg.username
+		// Re-filter collaborators if already loaded
+		m.collaborators = filterOutUser(m.collaborators, m.currentUser)
 		return m, nil
 
 	case searchResultsMsg:
 		// Only update if this result matches the current query
 		if msg.query == m.lastQuery {
-			m.searchResults = msg.results
+			m.searchResults = filterOutUser(msg.results, m.currentUser)
 			m.loading = false
 			m.updateSearchList()
 		}
@@ -263,10 +275,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case teamMembersLoadedMsg:
-		m.teamMembers = msg.members
-		m.filteredTeamMembers = msg.members
+		filtered := filterOutUser(msg.members, m.currentUser)
+		m.teamMembers = filtered
+		m.filteredTeamMembers = filtered
 		m.loading = false
 		m.updateSearchList()
+		if m.focusInput {
+			m.focusInput = false
+			return m, m.searchInput.Focus()
+		}
 		return m, nil
 
 	case debounceTickMsg:
@@ -328,6 +345,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedTeam = nil
 			m.teamMembers = nil
 			m.searchInput.SetValue("")
+			m.searchInput.Focus()
 			return m, nil
 		}
 		if m.view != ViewMain {
@@ -391,7 +409,7 @@ func (m Model) handleMainKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.searchInput.SetValue("")
 		m.searchInput.Placeholder = "Filter teams..."
-		m.searchInput.Blur()
+		m.searchInput.Focus()
 		return m, loadTeams
 
 	case "d", "backspace", "delete":
@@ -494,9 +512,9 @@ func (m Model) handleTeamsKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedTeam = &item.team
 			m.view = ViewTeamMembers
 			m.loading = true
+			m.focusInput = true
 			m.searchInput.SetValue("")
 			m.searchInput.Placeholder = "Filter team members..."
-			m.searchInput.Blur() // Start with list focused, not input
 			return m, loadTeamMembers(item.team.Org, item.team.Slug)
 		}
 
@@ -719,4 +737,23 @@ func loadTeamMembers(org, slug string) tea.Cmd {
 		}
 		return teamMembersLoadedMsg{members: members}
 	}
+}
+
+func loadCurrentUser() tea.Msg {
+	username, _ := github.GetAuthenticatedUser()
+	return currentUserLoadedMsg{username: username}
+}
+
+// filterOutUser removes the specified user from a slice of pairs.
+func filterOutUser(pairs []config.Pair, username string) []config.Pair {
+	if username == "" {
+		return pairs
+	}
+	filtered := make([]config.Pair, 0, len(pairs))
+	for _, p := range pairs {
+		if !strings.EqualFold(p.Username, username) {
+			filtered = append(filtered, p)
+		}
+	}
+	return filtered
 }
